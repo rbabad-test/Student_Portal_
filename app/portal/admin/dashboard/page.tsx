@@ -1,25 +1,42 @@
-// components/DashboardPage.tsx
+"use client"; 
+
+import { useState, useEffect } from 'react';
 
 export default function DashboardPage() {
+  const [teacherCount, setTeacherCount] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch("/api/portal/admin?table=teachers&count=true");
+        if (res.ok) {
+          const data = await res.json();
+          // Update state with the clean count value returned from NextRequest
+          setTeacherCount(data.count); 
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard statistics:", err);
+      }
+    };
+    fetchMetrics();
+  }, []);
+
   const stats = [
     { 
       label: 'Active Teachers', 
-      value: '26', 
+      value: teacherCount, 
       color: 'text-emerald-600', 
       bg: 'bg-emerald-100', 
       trend: 'All verified', 
       up: true,
-      svg: <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.174L10.74 12.5a.75.75 0 0 0 .52 0l6.48-2.326m-13.48 0L3 9.375l9-3.75 9 3.75-1.26.524m-12.48 2.523v3.546c0 .542.472.946 1.011.838 1.64-.33 3.29-.514 4.989-.551a37.883 37.883 0 0 1 4.989.551c.539.108 1.011-.296 1.011-.838V10.174m-12.48 2.523L12 15.25l6-2.553" />
-    },
-    { 
-      label: 'Upcoming Events', 
-      value: '2', 
-      color: 'text-blue-600', 
-      bg: 'bg-blue-100', 
-      trend: 'Updated', 
-      up: true,
-      svg: <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-12-11.25h.008v.008H9V7.5zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zM12 7.5h.008v.008H12V7.5zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm1.125 4.5h.008v.008H13.5V12zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm1.5 0h.008v.008H15V12zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm-3.75 3h.008v.008H11.25v-.008zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm1.5 0h.008v.008H12.75v-.008zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm1.5 0h.008v.008H14.25v-.008zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" />
-    },
+      svg: (
+        <path 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          d="M4.26 10.174L10.74 12.5a.75.75 0 0 0 .52 0l6.48-2.326m-13.48 0L3 9.375l9-3.75 9 3.75-1.26.524m-12.48 2.523v3.546c0 .542.472.946 1.011.838 1.64-.33 3.29-.514 4.989-.551a37.883 37.883 0 0 1 4.989.551c.539.108 1.011-.296 1.011-.838V10.174m-12.48 2.523L12 15.25l6-2.553" 
+        />
+      )
+    }
   ];
 
   return (

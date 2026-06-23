@@ -1,10 +1,46 @@
 // components/DashboardPage.tsx
+"use client";
+
+import { useState, useEffect } from 'react';
 
 export default function DashboardPage() {
+  const [studentCount, setStudentCount] = useState<number>(0);
+  const [admissionCount, setAdmissionCount] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch("/api/portal/registrar?table=students&count=true");
+        if (res.ok) {
+          const data = await res.json();
+          setStudentCount(data.count); 
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard statistics:", err);
+      }
+    };
+    fetchMetrics();
+  }, []);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch("/api/portal/registrar?table=admissions_applications&count=true");
+        if (res.ok) {
+          const data = await res.json();
+          setAdmissionCount(data.count); 
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard statistics:", err);
+      }
+    };
+    fetchMetrics();
+  }, []);
+
   const stats = [
     { 
       label: 'Total Students', 
-      value: '1,248', 
+      value: studentCount, 
       color: 'text-blue-600', 
       bg: 'bg-blue-100', 
       trend: '12%', 
@@ -13,7 +49,7 @@ export default function DashboardPage() {
     },
     { 
       label: 'Pending Admissions', 
-      value: '42', 
+      value: admissionCount, 
       color: 'text-amber-600', 
       bg: 'bg-amber-100', 
       trend: 'Action needed', 

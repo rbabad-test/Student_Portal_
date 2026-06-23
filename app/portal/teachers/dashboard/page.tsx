@@ -1,4 +1,5 @@
-"use client";
+"use client"; 
+import { useState, useEffect } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,6 +14,22 @@ import {
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 export default function Dashboard() {
+  const [activeStudents, setActiveStudents] = useState<number>(0);
+  useEffect(() => {
+    const getAnalytics = async () => {
+      try {
+        const res = await fetch("/api/teachers");
+        if (res.ok) {
+          const data = await res.json();
+          setActiveStudents(data.totalActiveStudents);
+        }
+      } catch (err) {
+        console.error("Could not fetch active student metrics:", err);
+      }
+    };
+    getAnalytics();
+  }, []);
+
   const gradeData = {
     labels: ['A', 'B', 'C', 'D', 'F'],
     datasets: [{
@@ -31,7 +48,7 @@ export default function Dashboard() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <StatCard title="Total Students" value="128" icon="fa-users" color="blue" />
+        <StatCard title="Total Students" value={activeStudents} icon="fa-users" color="blue" />
         <StatCard title="Classes" value="4" icon="fa-chalkboard-teacher" color="green" />
         <StatCard title="Pending Grades" value="12" icon="fa-clipboard-list" color="yellow" />
         <StatCard title="Upcoming Events" value="2" icon="fa-calendar-check" color="purple" />

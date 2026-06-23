@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-, "app/portal/admin/admission", "app/portal/admin/dashboard"  ],
+, "app/portal/admin/admission", "app/portal/admin/dashboard", "app/portal/admin/settings"  ],
   "exclude": ["node_modules"]
 }

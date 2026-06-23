@@ -7,34 +7,72 @@ import { useRouter } from "next/navigation";
 export default function Portal() {
   const [showPassword, setShowPassword] = useState(false);
   const [isStaff, setIsStaff] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(""); 
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
+    // Clear any leftover audit cookies immediately when landing on the login screen
+    document.cookie = "audit_user=; path=/; max-age=0; SameSite=Strict";
+
     if (formRef.current) {
       (formRef.current.elements.namedItem("username") as HTMLInputElement).value = "";
       (formRef.current.elements.namedItem("password") as HTMLInputElement).value = "";
     }
+    setErrorMessage(""); 
   }, [isStaff]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(""); 
+    
     const form = e.target as HTMLFormElement;
     const username = (form.elements.namedItem("username") as HTMLInputElement).value.trim();
     const password = (form.elements.namedItem("password") as HTMLInputElement).value.trim();
 
     if (!username || !password) return;
 
-    if (isStaff) {
-      if (username.toUpperCase().startsWith("ADM")) {
-        router.push("/Portal/admin/dashboard");
-      } else if (username.toUpperCase().startsWith("TCH")) {
-        router.push("/Portal/teachers/Dashboard");
-      } else {
-        alert("Invalid Employee ID format. Use ADM-XXXX for Admin or TCH-XXXX for Teacher.");
+    // Determine target user type string based on the active tab layout selection
+    const expectedUserType = isStaff ? "staff" : "student";
+
+    try {
+      // UPDATED: Sending expectedUserType to the backend server route handler
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          username, 
+          password, 
+          user_type: expectedUserType 
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrorMessage(data.message || "Something went wrong.");
+        return;
       }
-    } else {
-      router.push("/Portal/Dashboard");
+
+      // Save the validated username inside a secure cookie for auditing
+      document.cookie = `audit_user=${encodeURIComponent(username)}; path=/; max-age=28800; SameSite=Strict`;
+
+      if (isStaff) {
+        if (username.toUpperCase().startsWith("ADM")) {
+          router.push("/portal/admin/dashboard");
+        } else if (username.toUpperCase().startsWith("TCH")) {
+          router.push("/portal/teachers/dashboard");
+        } else if (username.toUpperCase().startsWith("REG")) {
+          router.push("/portal/registrar/dashboard");
+        } else {
+          setErrorMessage("Invalid Employee ID format. Use ADM-XXXX for Admin or TCH-XXXX for Teacher or REG-XXXX for Registar.");
+        }
+      } else {
+        router.push("/portal/students/dashboard");
+      }
+
+    } catch (err) {
+      setErrorMessage("Cannot connect to the server. Please check your network connection.");
     }
   };
 
@@ -90,6 +128,13 @@ export default function Portal() {
             Faculty
           </button>
         </div>
+
+        {/* Error Notification Alert Block */}
+        {errorMessage && (
+          <div className="mb-4 p-3.5 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-200 text-left">
+            {errorMessage}
+          </div>
+        )}
 
         {/* Login Form */}
         <form className="text-left" onSubmit={handleLogin} ref={formRef}>
