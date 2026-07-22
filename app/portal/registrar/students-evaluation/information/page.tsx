@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface SubjectRecord {
@@ -27,7 +27,7 @@ interface StudentSectionData {
   subjects: SubjectRecord[];
 }
 
-export default function AdminStudentDetailsPage() {
+function AdminStudentDetailsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studentId = searchParams.get("id");
@@ -235,6 +235,21 @@ export default function AdminStudentDetailsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Export default component wrapped inside Suspense
+export default function AdminStudentDetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-gray-400 font-medium animate-pulse">
+          Loading Page Parameters...
+        </div>
+      }
+    >
+      <AdminStudentDetailsContent />
+    </Suspense>
   );
 }
 
