@@ -34,6 +34,8 @@ jobs:
 
       - name: Build static Next.js export
         run: npx next build
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
       - name: Upload static export artifact
         uses: actions/upload-pages-artifact@v3
@@ -50,5 +52,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-        
