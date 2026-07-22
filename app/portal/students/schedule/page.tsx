@@ -173,8 +173,6 @@ export default function StudentSchedulePage() {
                   }`}
                 >
                   <span>{block.start}</span>
-                  <span className="opacity-40 text-[7px]">—</span>
-                  <span>{block.end}</span>
                 </div>
               );
             })}
