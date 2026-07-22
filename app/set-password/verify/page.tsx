@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SetPasswordVerificationPage() {
+function SetPasswordVerificationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -46,14 +46,11 @@ export default function SetPasswordVerificationPage() {
 
       if (res.ok && data.success) {
         // ✅ CACHING VALUES HERE FOR LATER USE
-        // Saves the string teacher_id typed by the user (e.g., "TCH-0001")
         localStorage.setItem("cached_teacher_id", teacherId.trim());
         localStorage.setItem("cached_security_code", securityCode.trim());
-        
-        // Saves the numeric/double internal 'id' returned from MongoDB response
         localStorage.setItem("cached_mongo_id", String(data.applicantId));
 
-        // Forward user straight to your creation interface view
+        // Forward user straight to creation interface view
         router.push(`/set-password/setup`);
       } else {
         setErrorMsg(data.message || "Verification failed. Access denied.");
@@ -120,5 +117,19 @@ export default function SetPasswordVerificationPage() {
         )}
       </form>
     </div>
+  );
+}
+
+export default function SetPasswordVerificationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4 text-gray-500">
+          Loading verification page...
+        </div>
+      }
+    >
+      <SetPasswordVerificationContent />
+    </Suspense>
   );
 }
