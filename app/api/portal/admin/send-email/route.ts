@@ -6,6 +6,18 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Guard check and delayed instantiation of Resend inside the handler
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.error("Resend API key missing from process.env.RESEND_API_KEY");
+      return NextResponse.json(
+        { message: "Server configuration error: Missing Resend API key." },
+        { status: 500 }
+      );
+    }
+
+    const resend = new Resend(apiKey);
+
     const { teacher_id, email_address, faculty_name, id } = await request.json();
 
     // Basic payload validation
