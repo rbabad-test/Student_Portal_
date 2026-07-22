@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const enrollmentURL = "https://solid-umbrella-gxj599j9jpp3vx9-3000.app.github.dev/admission/enrollment";
@@ -36,7 +36,8 @@ interface ApplicantData {
   }>;
 }
 
-export default function AdminApplicantDetailsPage() {
+// 1. Inner component where useSearchParams is executed
+function ApplicantDetailsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicantId = searchParams.get("id"); 
@@ -67,12 +68,10 @@ export default function AdminApplicantDetailsPage() {
     fetchApplicantDetails();
   }, [applicantId]);
 
-  // 🚀 UPDATED: Modified handler to update status AND automatically dispatch notification emails
   const updateStatus = async (newStatus: "Approved" | "Rejected") => {
     if (!applicant) return;
     setActionLoading(true);
     try {
-      // 1. Update your database record via API
       const res = await fetch("/api/portal/registrar", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -82,23 +81,17 @@ export default function AdminApplicantDetailsPage() {
       if (res.ok) {
         setApplicant((prev) => prev ? { ...prev, status: newStatus } : null);
         
-        // ====================================================================
-        // 🚀 THE DYNAMIC EMAIL SET SWITCH
-        // ====================================================================
-        
-        // 1. Swaps the Subject Line based on the button clicked
         const emailSubject = newStatus === "Approved" 
           ? "Admission Update: Application Approved! 🎉" 
           : "Admission Update: Application Status Profile";
 
-        // 2. Swaps the HTML Email Body template based on the button clicked
         const emailHtmlContent = newStatus === "Approved" 
           ? `
             <div style="font-family: sans-serif; max-width: 600px; color: #333; line-height: 1.6;">
               <h2 style="color: #2575fc;">Congratulations, ${applicant.firstName}!</h2>
               <p>We are pleased to inform you that your admission application for the <strong>${applicant.track}</strong> track has been <strong>Approved</strong>.</p>
               <p><strong>Admission Tracking ID:</strong> ${applicant.applicant_id}</p>
-              <p>Please follow the link below to completed your enrollment process</>
+              <p>Please follow the link below to completed your enrollment process</p>
               <p><a href="https://solid-umbrella-gxj599j9jpp3vx9-3000.app.github.dev/admission/verification">Enrollment link</a></p>
               <p>Our registrar office will reach out to you shortly regarding the next enrolment steps, document verification, and schedules.</p>
               <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
@@ -117,7 +110,6 @@ export default function AdminApplicantDetailsPage() {
             </div>
           `;
 
-        // 3. Post the selected set to your single email route handler
         try {
           const emailRes = await fetch("/api/send-email", {
             method: "POST",
@@ -275,11 +267,9 @@ export default function AdminApplicantDetailsPage() {
               </div>
             </Card>
 
-            {/* Assessment Interactivity Dashboard buttons */}
             <Card title="Application Assessment Review">
               <div className="grid grid-cols-2 gap-3">
                 <button 
-                  // 🚀 DISABLE IF: An action is currently loading OR the status is no longer "Pending"
                   disabled={actionLoading || applicant.status !== "Pending"}
                   onClick={() => updateStatus("Approved")}
                   className="bg-green-100 text-green-700 py-2.5 px-4 rounded-lg hover:bg-green-200 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -287,7 +277,6 @@ export default function AdminApplicantDetailsPage() {
                   Approve Application
                 </button>
                 <button 
-                  // 🚀 DISABLE IF: An action is currently loading OR the status is no longer "Pending"
                   disabled={actionLoading || applicant.status !== "Pending"}
                   onClick={() => updateStatus("Rejected")}
                   className="bg-red-100 text-red-700 py-2.5 px-4 rounded-lg hover:bg-red-200 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -304,7 +293,22 @@ export default function AdminApplicantDetailsPage() {
   );
 }
 
-// Sub components remain unchanged below
+// 2. Export default wrapped inside a Suspense boundary
+export default function AdminApplicantDetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-gray-400 font-medium animate-pulse">
+          Retrieving Application Profile...
+        </div>
+      }
+    >
+      <ApplicantDetailsContent />
+    </Suspense>
+  );
+}
+
+// Helper components remain unchanged
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
