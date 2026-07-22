@@ -1,6 +1,7 @@
 "use client";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
 
 const navItems = [
   { name: 'Dashboard', href: '/portal/teachers/dashboard', icon: 'fas fa-tachometer-alt' },
@@ -10,14 +11,65 @@ const navItems = [
   { name: 'Settings', href: '/portal/teachers/settings', icon: 'fas fa-cog' },
 ];
 
-// ... (imports and navItems same)
 export default function Sidebar() {
   const pathname = usePathname();
+  
+  // 🚀 NEW: Manage states for the authenticated teacher profile info
+  const [teacherName, setTeacherName] = useState<string>("Loading profile...");
+
+  // Helper to extract cookie values on the client side
+  const getCookie = (name: string) => {
+    if (typeof document === "undefined") return null;
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift();
+    return null;
+  };
+
+  useEffect(() => {
+    const fetchTeacherProfile = async () => {
+      try {
+        // 🚀 Extract logged-in teacher identity (checks cookie string or fallback storage token)
+        const cachedId = getCookie("audit_user") || localStorage.getItem("teacher_id");
+
+        if (!cachedId) {
+          setTeacherName("Guest Instructor");
+          return;
+        }
+
+        // Hit your dynamic registrar/portal route for the 'teachers' collection
+        const res = await fetch(`/api/portal/teacher?table=teachers&id=${cachedId}&action=profile`);
+        if (res.ok) {
+          const jsonResponse = await res.json();
+          const teacherData = jsonResponse.data || jsonResponse;
+
+          if (teacherData) {
+            const prefix = teacherData.prefix;
+            const nameString = `${prefix} ${teacherData.first_name} ${teacherData.last_name}`;
+            setTeacherName(nameString);
+          } else {
+            setTeacherName(cachedId); // Fallback to raw ID string if record doesn't exist
+          }
+        } else {
+          setTeacherName(cachedId);
+        }
+      } catch (err) {
+        console.error("Failed loading teacher profile context inside sidebar component:", err);
+        setTeacherName("Teacher Account");
+      }
+    };
+
+    fetchTeacherProfile();
+  }, []);
+
   return (
     <aside className="w-64 bg-yellow-400 text-yellow-950 flex flex-col h-full shrink-0 shadow-lg border-r border-yellow-500 font-sans">
       <div className="p-6 border-b border-yellow-600/30">
         <h1 className="text-xl font-bold uppercase tracking-tight">Teacher Portal</h1>
-        <p className="text-sm font-bold opacity-60">Mr. Santiago</p>
+        {/* 🚀 UPDATED: Outputs your active dynamically loaded state string */}
+        <p className="text-sm font-bold opacity-60 truncate" title={teacherName}>
+          {teacherName}
+        </p>
       </div>
       <nav className="flex-1 overflow-y-auto p-3">
         <ul className="space-y-1">
