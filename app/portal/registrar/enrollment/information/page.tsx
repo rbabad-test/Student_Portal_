@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface StudentData {
@@ -25,7 +25,7 @@ interface StudentData {
   emergency_contact_number: string;
 }
 
-export default function AdminStudentDetailsPage() {
+function StudentDetailsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studentId = searchParams.get("id"); 
@@ -34,7 +34,7 @@ export default function AdminStudentDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchStudentDetails = async () => {
+  const fetchStudentDetails = useCallback(async () => {
     if (!studentId) return;
     setLoading(true);
     try {
@@ -50,11 +50,11 @@ export default function AdminStudentDetailsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [studentId]);
 
   useEffect(() => {
     fetchStudentDetails();
-  }, [studentId]);
+  }, [fetchStudentDetails]);
 
   const updateStatus = async (newStatus: "Enrolled" | "Rejected") => {
     if (!student) return;
@@ -256,6 +256,21 @@ export default function AdminStudentDetailsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Wrapper export with Suspense boundary to prevent Next.js useSearchParams client bailouts
+export default function AdminStudentDetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-gray-400 font-medium animate-pulse">
+          Loading page parameters...
+        </div>
+      }
+    >
+      <StudentDetailsContent />
+    </Suspense>
   );
 }
 
