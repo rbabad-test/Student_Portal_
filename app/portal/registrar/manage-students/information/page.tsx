@@ -1,10 +1,10 @@
-"use client"; 
+"use client";
 
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface StudentData {
-  _id: string; 
+  _id: string;
   student_id: string;
   first_name: string;
   middle_name: string;
@@ -23,16 +23,16 @@ interface StudentData {
   emergency_contact_person: string;
   emergency_contact_relationship: string;
   emergency_contact_number: string;
-  year?: string;               
-  assigned_section?: string;   
-  semester?: string; 
+  year?: string;
+  assigned_section?: string;
+  semester?: string;
 }
 
 interface SubjectData {
   _id: string;
   subject_id: string;
   subject_name: string;
-  sched_code: string; 
+  sched_code: string;
   semester: string;
   subject_year_section: string;
   teacher_id: string;
@@ -53,27 +53,26 @@ interface StudentSectionData {
   class: ClassEntry[];
 }
 
-export default function AdminStudentDetailsPage() {
+function AdminStudentDetailsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const studentId = searchParams.get("id"); 
+  const studentId = searchParams.get("id");
 
   const [student, setStudent] = useState<StudentData | null>(null);
   const [studentSectionDoc, setStudentSectionDoc] = useState<StudentSectionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const [sectionsList, setSectionsList] = useState<string[]>([]);  
+  const [sectionsList, setSectionsList] = useState<string[]>([]);
   const [selectedSection, setSelectedSection] = useState<string>("");
-  const [selectedSemester, setSelectedSemester] = useState<string>("1"); 
-  const currentYear = new Date().getFullYear().toString(); 
+  const [selectedSemester, setSelectedSemester] = useState<string>("1");
+  const currentYear = new Date().getFullYear().toString();
 
   const [subjectsList, setSubjectsList] = useState<SubjectData[]>([]);
   const [subjectsLoading, setSubjectsLoading] = useState<boolean>(false);
 
   // -------------------------------------------------------------
   // LOGIC 2: Find the latest class record based on Year and Semester
-  // (Year desc, Semester desc -> Semester 2 is later than Semester 1)
   // -------------------------------------------------------------
   const latestClass = useMemo<ClassEntry | null>(() => {
     if (!studentSectionDoc || !studentSectionDoc.class || studentSectionDoc.class.length === 0) {
@@ -88,10 +87,9 @@ export default function AdminStudentDetailsPage() {
   }, [studentSectionDoc]);
 
   // -------------------------------------------------------------
-  // Determine Button Text & Disabled State based on Logics 1 - 5
+  // Determine Button Text & Action Behavior
   // -------------------------------------------------------------
   const { buttonLabel, isButtonDisabled, actionType } = useMemo(() => {
-    // Logic 1: Does not exist in student_section collection
     if (!studentSectionDoc || !latestClass) {
       return { buttonLabel: "Assign Section", isButtonDisabled: false, actionType: "CREATE" };
     }
@@ -108,7 +106,7 @@ export default function AdminStudentDetailsPage() {
       return { buttonLabel: "Assign Section", isButtonDisabled: false, actionType: "PUSH_NEW" };
     }
 
-    // Logic 4: evaluation is not null/empty and NOT "Approved" -> "Assign Section" disabled
+    // Logic 4: evaluation is not empty and NOT "Approved" -> Disabled
     return { buttonLabel: "Assign Section", isButtonDisabled: true, actionType: "DISABLED" };
   }, [studentSectionDoc, latestClass]);
 
@@ -125,14 +123,13 @@ export default function AdminStudentDetailsPage() {
         setStudent(data);
       }
 
-      // Fetch student_section document directly
+      // Fetch student_section document
       const sectionRes = await fetch(`/api/portal/registrar?table=student_section&id=${studentId}`);
       if (sectionRes.ok) {
         const sectionJson = await sectionRes.json();
         const sectionData: StudentSectionData = sectionJson.data || null;
         setStudentSectionDoc(sectionData);
 
-        // Pre-fill fields based on latest record if existing
         if (sectionData && sectionData.class && sectionData.class.length > 0) {
           const sorted = [...sectionData.class].sort((a, b) => {
             const yearDiff = Number(b.year) - Number(a.year);
@@ -172,13 +169,13 @@ export default function AdminStudentDetailsPage() {
       setSubjectsList([]);
       return;
     }
-    
+
     setSubjectsLoading(true);
     try {
       const res = await fetch(
         `/api/portal/registrar?table=subjects&subject_year_section=${encodeURIComponent(selectedSection)}&semester=${selectedSemester}&year=${currentYear}`
       );
-      
+
       if (res.ok) {
         const jsonResponse = await res.json();
         setSubjectsList(jsonResponse.data || []);
@@ -200,7 +197,7 @@ export default function AdminStudentDetailsPage() {
   }, [selectedSection, selectedSemester, currentYear]);
 
   // -------------------------------------------------------------
-  // Handles Assigning / Updating Section based on determined action
+  // Handles Assigning / Updating Section
   // -------------------------------------------------------------
   const handleAssignOrUpdateSection = async () => {
     if (!student || !selectedSection || selectedSection === "" || !selectedSemester || isButtonDisabled) return;
@@ -209,7 +206,7 @@ export default function AdminStudentDetailsPage() {
     try {
       const formattedSubjects = subjectsList.map((subj) => ({
         subject_id: subj.subject_id,
-        teacher_id: subj.teacher_id, 
+        teacher_id: subj.teacher_id,
         grade_1: "",
         grade_2: "",
         grade_3: "",
@@ -224,7 +221,7 @@ export default function AdminStudentDetailsPage() {
         section: selectedSection,
         semester: selectedSemester,
         subjects: formattedSubjects,
-        actionType: actionType, // "CREATE", "UPDATE", or "PUSH_NEW"
+        actionType: actionType,
         targetYear: latestClass?.year,
         targetSemester: latestClass?.semester,
       };
@@ -238,10 +235,9 @@ export default function AdminStudentDetailsPage() {
       if (res.ok) {
         alert(
           actionType === "UPDATE"
-            ? `Successfully updated Section to "${selectedSection}" for Semester ${selectedSemester}, Year ${currentYear}!`
-            : `Successfully assigned Section "${selectedSection}" and loaded ${formattedSubjects.length} subjects!`
+            ? `Successfully updated section to "${selectedSection}" for Semester ${selectedSemester}, Year ${currentYear}!`
+            : `Successfully assigned section "${selectedSection}" with ${formattedSubjects.length} subjects!`
         );
-        // Refresh details after update
         await fetchStudentDetails();
       } else {
         const errorData = await res.json();
@@ -249,7 +245,7 @@ export default function AdminStudentDetailsPage() {
       }
     } catch (err) {
       console.error("Section update execution error:", err);
-      alert("A network problem blocked section saving routines.");
+      alert("A network problem blocked saving section details.");
     } finally {
       setActionLoading(false);
     }
@@ -258,7 +254,7 @@ export default function AdminStudentDetailsPage() {
   if (!studentId) {
     return (
       <div className="min-h-screen flex items-center justify-center text-red-500 italic">
-        Error: Missing valid student identity parameter context inside page address.
+        Error: Missing valid student ID parameter context in URL.
       </div>
     );
   }
@@ -283,7 +279,7 @@ export default function AdminStudentDetailsPage() {
     <div className="min-h-screen bg-gray-50 px-4 py-8">
       <div className="max-w-6xl mx-auto space-y-6">
 
-        {/* Back and Status Row */}
+        {/* Header Navigation */}
         <div className="flex justify-between items-center">
           <button onClick={() => router.back()} className="text-gray-600 transition-colors hover:text-gray-900 font-medium">
             ← Back to Manage Students
@@ -300,7 +296,7 @@ export default function AdminStudentDetailsPage() {
           </div>
         </div>
 
-        {/* Banner Display Header Block */}
+        {/* Student Banner */}
         <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-6 rounded-xl shadow-sm">
           <h1 className="text-3xl font-bold">
             {student.first_name} {student.middle_name ? `${student.middle_name} ` : ""}{student.last_name}
@@ -309,10 +305,10 @@ export default function AdminStudentDetailsPage() {
           <p className="text-xs mt-2 opacity-80">System Student ID: {student.student_id}</p>
         </div>
 
-        {/* Main Content Layout Grid */}
+        {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6">
-          
-          {/* Left Column */}
+
+          {/* Left Column: Personal Data */}
           <div className="lg:col-span-2 space-y-6">
             <Card title="Personal Information">
               <Grid>
@@ -353,14 +349,13 @@ export default function AdminStudentDetailsPage() {
             </Card>
           </div>
 
-          {/* Right Column */}
+          {/* Right Column: Actions & Subjects */}
           <div className="space-y-6">
-            
-            {/* Section Assignment / Update Card */}
+
+            {/* Section Assignment Block */}
             <Card title={buttonLabel === "Update Section" ? "Update Section" : "Assign Section"}>
               <div className="space-y-4">
-                
-                {/* Uneditable Year Block */}
+
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                     Year
@@ -373,7 +368,6 @@ export default function AdminStudentDetailsPage() {
                   />
                 </div>
 
-                {/* Semester Dropdown */}
                 <div>
                   <label htmlFor="semester-dropdown" className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                     Select Semester
@@ -389,7 +383,6 @@ export default function AdminStudentDetailsPage() {
                   </select>
                 </div>
 
-                {/* Section Dropdown */}
                 <div>
                   <label htmlFor="section-dropdown" className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                     Select Section
@@ -409,8 +402,7 @@ export default function AdminStudentDetailsPage() {
                   </select>
                 </div>
 
-                {/* Dynamic Button (Assign Section / Update Section) */}
-                <button 
+                <button
                   disabled={actionLoading || isButtonDisabled || !selectedSection || selectedSection === ""}
                   onClick={handleAssignOrUpdateSection}
                   className={`w-full py-2.5 px-4 rounded-lg text-sm font-semibold transition-colors shadow-sm mt-2 ${
@@ -422,7 +414,6 @@ export default function AdminStudentDetailsPage() {
                   {actionLoading ? "Processing..." : buttonLabel}
                 </button>
 
-                {/* Warning note for disabled state (Logic 4) */}
                 {isButtonDisabled && (
                   <p className="text-[11px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
                     Cannot assign a new section until the latest academic evaluation is set to &ldquo;Approved&rdquo;. Current evaluation: &ldquo;{latestClass?.evaluation || "Pending"}&rdquo;.
@@ -432,7 +423,7 @@ export default function AdminStudentDetailsPage() {
               </div>
             </Card>
 
-            {/* Available Subjects Block */}
+            {/* Subject Matrix Card */}
             <Card title="Available Subjects">
               <div className="space-y-3">
                 {!selectedSection ? (
@@ -471,7 +462,7 @@ export default function AdminStudentDetailsPage() {
               </div>
             </Card>
 
-            {/* Enrollment Tracking Context Table (Displaying Latest Record History - Logic 2) */}
+            {/* Latest Enrollment Status Table */}
             <Card title="Enrollment Tracking Context">
               <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-left text-xs">
@@ -524,6 +515,14 @@ export default function AdminStudentDetailsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminStudentDetailsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-400">Loading student details...</div>}>
+      <AdminStudentDetailsContent />
+    </Suspense>
   );
 }
 
