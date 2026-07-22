@@ -1,29 +1,53 @@
-import { NextRequest, NextResponse } from "next/server"; 
-import { cookies } from "next/headers";  
+import { NextRequest, NextResponse } from "next/server";  
+import { cookies } from "next/headers";
 import mongoose from "mongoose";
-import { Audit }        from "@/models/Schema"; 
-import { Teacher }      from "@/models/Schema"; 
-import { Subject }      from "@/models/Schema"; 
-import { Student }      from "@/models/Schema"; 
-import { Config }       from "@/models/Schema"; 
+import { Audit }        from "@/models/Schema";
+import { Teacher }      from "@/models/Schema";
+import { Subject }      from "@/models/Schema";
+import { Student }      from "@/models/Schema";
+import { Config }       from "@/models/Schema";
+import { Events }        from "@/models/Schema";
 
-//connect to mongodb database
+declare global {
+  var _mongooseConnPromise: Promise<typeof mongoose> | undefined;
+}
+
 const connectDB = async () => {
   if (mongoose.connection.readyState >= 1) return;
-  await mongoose.connect(process.env.MONGODB_URI!);
+  if (!global._mongooseConnPromise) {
+    global._mongooseConnPromise = mongoose.connect(process.env.MONGODB_URI!);
+  }
+  await global._mongooseConnPromise;
 };
 
-//tables to be access should be added here
 const ALLOWED_TABLES: Record<string, { model: mongoose.Model<any>; idKey: string }> = {
-  teachers:       { model: mongoose.models.Teacher, idKey: "teacher_id" },
-  students:       { model: mongoose.models.Student, idKey: "student_id" },
-  subjects:       { model: mongoose.models.Subject, idKey: "subject_id" },
-  configuration:  { model: mongoose.models.Config,  idKey: "_id" },
+  teachers:         { model: mongoose.models.Teacher, idKey: "teacher_id" },
+  students:         { model: mongoose.models.Student, idKey: "student_id" },
+  subjects:         { model: mongoose.models.Subject, idKey: "subject_id" },
+  configuration:    { model: mongoose.models.Config,  idKey: "_id" },
+  audit_logs:       { model: Audit,   idKey: "_id" },
+  events:           { model: Events,  idKey: "_id" },
 };
 
 const CONFIG_DOC_ID = "6a3805c56bb871d76758fe12";
 
-//request to get the table records
+function getAuditUser(request: NextRequest): string {
+  const auditUserCookie = request.cookies.get("audit_user");
+  return auditUserCookie ? decodeURIComponent(auditUserCookie.value) : "SYSTEM";
+}
+
+async function generateSequentialId(
+  model: mongoose.Model<any>,
+  field: string,
+  prefix: string
+): Promise<string> {
+  const totalCount = await model.countDocuments({
+    [field]: new RegExp(`^${prefix}`),
+  });
+  const paddedIndex = (totalCount + 1).toString().padStart(4, "0");
+  return `${prefix}${paddedIndex}`;
+}
+
 export async function GET(request: NextRequest) {
     try {
         await connectDB();        
@@ -47,7 +71,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ count: totalCount }, { status: 200 });
         }
 
-        // SPECIAL SEEDING RULE: If they request the configuration table, seed it if empty
         if (tableName === "configuration") {
           let config = await Config.findById(CONFIG_DOC_ID);
           if (!config) {
@@ -71,7 +94,15 @@ export async function GET(request: NextRequest) {
             }
             return NextResponse.json(record, { status: 200 });
         } else {
-            const records = await TargetModel.find({}).sort({ id: -1 });
+            const queryFilters: Record<string, any> = {};
+            
+            searchParams.forEach((value, key) => {
+              if (key !== "table" && key !== "id" && key !== "count") {
+                queryFilters[key] = value; 
+              }
+            });
+
+            const records = await TargetModel.find(queryFilters).sort({ [idKey]: -1 });
             return NextResponse.json(records, { status: 200 });
         }
 
@@ -81,7 +112,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-//new records
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
@@ -97,7 +127,7 @@ export async function POST(request: NextRequest) {
     let bodyData = await request.json();
 
     if (tableName === "configuration") {
-      const { action, field, value } = bodyData; // action: "add" | "remove"
+      const { action, field, value } = bodyData; 
 
       const validFields = ["section", "room", "employee_status", "employee_role", "prefix", "specification",];
       if (!validFields.includes(field)) {
@@ -106,21 +136,18 @@ export async function POST(request: NextRequest) {
 
       let updateQuery = {};
       if (action === "add") {
-        updateQuery = { $addToSet: { [field]: value } }; // Automatically guards against duplicates
+        updateQuery = { $addToSet: { [field]: value } }; 
       } else if (action === "remove") {
-        updateQuery = { $pull: { [field]: value } }; // Removes array elements easily
+        updateQuery = { $pull: { [field]: value } }; 
       }
 
       const updatedConfig = await TargetModel.findByIdAndUpdate(
-        CONFIG_DOC_ID, // Use your hardcoded ID "6a3805c56bb871d76758fe12"
+        CONFIG_DOC_ID, 
         updateQuery,
         { new: true, upsert: true }
       );
 
-      // --- AUDIT TRAIL FOR CONFIGURATION CHANGES ---
-      const cookieStore = request.cookies;
-      const auditUserCookie = cookieStore.get("audit_user");
-      const currentOperator = auditUserCookie ? decodeURIComponent(auditUserCookie.value) : "SYSTEM";
+      const currentOperator = getAuditUser(request);
       const activityDescription = `${action === "add" ? "Added" : "Removed"} configuration value '${value}' in [${field}]`;
       
       await createAuditLog(currentOperator, activityDescription);
@@ -131,15 +158,8 @@ export async function POST(request: NextRequest) {
     if (tableName === "teachers") {
       const currentYear = new Date().getFullYear();
       const idPrefix = `TCH-${currentYear}-`;
+      const structuralId = await generateSequentialId(TargetModel, "teacher_id", idPrefix);
 
-      const totalYearCount = await TargetModel.countDocuments({
-        teacher_id: new RegExp(`^${idPrefix}`)
-      });
-
-      const paddedIndex = (totalYearCount + 1).toString().padStart(4, "0");
-      const structuralId = `${idPrefix}${paddedIndex}`;
-
-      // Inject the generated ID into the document payload data
       bodyData = {
         ...bodyData,
         teacher_id: structuralId
@@ -147,16 +167,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (tableName === "subjects") {
-      const idPrefix = `ICT-`;
+      const idPrefix = `SUBJ-`;
+      const structuralId = await generateSequentialId(TargetModel, "subject_id", idPrefix);
 
-      const totalYearCount = await TargetModel.countDocuments({
-        subject_id: new RegExp(`^${idPrefix}`)
-      });
-
-      const paddedIndex = (totalYearCount + 1).toString().padStart(4, "0");
-      const structuralId = `${idPrefix}${paddedIndex}`;
-
-      // Inject the generated ID into the document payload data
       bodyData = {
         ...bodyData,
         subject_id: structuralId
@@ -166,9 +179,7 @@ export async function POST(request: NextRequest) {
     const newRecord = new TargetModel(bodyData);
     await newRecord.save();
 
-    const cookieStore = request.cookies;
-    const auditUserCookie = cookieStore.get("audit_user");
-    const currentOperator = auditUserCookie ? decodeURIComponent(auditUserCookie.value) : "SYSTEM";
+    const currentOperator = getAuditUser(request);
 
     let recordLabel = tableName === "subjects" 
       ? bodyData.subject_name 
@@ -177,7 +188,6 @@ export async function POST(request: NextRequest) {
     const singularType = tableName.endsWith("s") ? tableName.slice(0, -1) : tableName;
     const activityDescription = `Created new ${singularType}: (${recordLabel || "Unknown"})`;
 
-    // 🚀 4. WRITE TO AUDIT TRAIL LOG ENTRY
     await createAuditLog(currentOperator, activityDescription);
 
     return NextResponse.json({ message: "Record created successfully.", data: newRecord }, { status: 201 });
@@ -188,7 +198,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-//update records
 export async function PUT(request: NextRequest) {
   try {
     await connectDB();
@@ -202,10 +211,7 @@ export async function PUT(request: NextRequest) {
 
     const { model: TargetModel, idKey } = ALLOWED_TABLES[tableName];
     
-    // 1. Get the payload data
     const bodyData = await request.json();
-
-    // 2. Identify the record using your schema's key (e.g., teacher_id)
     const recordIdentifier = bodyData[idKey];
 
     if (!recordIdentifier) {
@@ -215,18 +221,21 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // 3. Set up the lookup query filter using your custom key structure
     const filter = { [idKey]: recordIdentifier };
-
-    // 🛠️ FIX: Clone the data and delete identity fields so MongoDB doesn't try to change them
     const updatePayload = { ...bodyData };
+    
     delete updatePayload._id; 
-    delete updatePayload.id; 
+    delete updatePayload.id;
+    delete updatePayload.__v; 
 
-    // 4. Find and update the document with the clean updatePayload
+    // 🚀 FIX: Modified to allow empty strings ("") to be saved to MongoDB
+    const cleanUpdatePayload = Object.fromEntries(
+      Object.entries(updatePayload).filter(([_, value]) => value !== undefined && value !== null)
+    );
+
     const updatedRecord = await TargetModel.findOneAndUpdate(
       filter,
-      { $set: updatePayload }, 
+      { $set: cleanUpdatePayload }, 
       { new: true, runValidators: true }
     );
 
@@ -234,11 +243,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ message: "Record not found to update." }, { status: 404 });
     }
 
-    // 5. Extract cookie for audit logging
-    const cookieStore = request.cookies;
-    const auditUserCookie = cookieStore.get("audit_user");
-    const activeUser = auditUserCookie ? decodeURIComponent(auditUserCookie.value) : "SYSTEM";
-
+    const activeUser = getAuditUser(request);
     await createAuditLog(activeUser, `Updated details for ${tableName} matching ID ${recordIdentifier}.`);
 
     return NextResponse.json({ message: "Record updated successfully.", data: updatedRecord }, { status: 200 });
@@ -249,7 +254,6 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-//this is for the audit_log
 async function createAuditLog(username: string, activityDescription: string) {
   let detectedUserType = "student";
   const upperUsername = username.toUpperCase();
@@ -258,6 +262,10 @@ async function createAuditLog(username: string, activityDescription: string) {
     detectedUserType = "admin";
   } else if (upperUsername.startsWith("TCH")) {
     detectedUserType = "teacher";
+  } else if (upperUsername.startsWith("REG")) {
+    detectedUserType = "registrar";
+  } else if (upperUsername.startsWith("ST")) {
+    detectedUserType = "student";
   }
 
   const logEntry = new Audit({
