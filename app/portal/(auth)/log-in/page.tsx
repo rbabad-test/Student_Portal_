@@ -56,7 +56,7 @@ export default function Portal() {
 
       // Save the validated username inside a secure cookie for auditing
       document.cookie = `audit_user=${encodeURIComponent(username)}; path=/; max-age=28800; SameSite=Strict`;
-
+      document.cookie = `username=${encodeURIComponent(username)}; path=/; max-age=28800; SameSite=Strict`;
       if (isStaff) {
         if (username.toUpperCase().startsWith("ADM")) {
           router.push("/portal/admin/dashboard");
@@ -207,7 +207,7 @@ export default function Portal() {
         </form>
 
         <Link
-          href="/Portal/forgot-password"
+          href="/portal/forgot-password"
           className="inline-block mt-6 text-[#2575fc] text-sm hover:underline"
         >
           Forgot Password?

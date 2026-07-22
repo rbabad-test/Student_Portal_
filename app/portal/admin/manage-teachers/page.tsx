@@ -1,20 +1,20 @@
 "use client";
 
-import React, { useState, useEffect } from "react"; 
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 
 interface Teacher {
-  id: number;
-  teacher_id: string;      
-  prefix: string;          
-  first_name: string;      
-  middle_name: string;     
-  last_name: string;       
-  email_address: string;   
-  contact_number: string;  
-  department_id: string;   
+  id: string;
+  teacher_id: string;
+  prefix: string;
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  email_address: string;
+  contact_number: string;
+  department_id: string;
   status: string;
-  role_id: string;         
+  role_id: string;
 }
 
 interface FacultyModalProps {
@@ -24,7 +24,12 @@ interface FacultyModalProps {
   onSave: (teacher: Teacher) => void;
 }
 
-function FacultyModal({ isOpen, teacher, onClose, onSave }: FacultyModalProps) {
+const FacultyModal = React.memo(function FacultyModal({
+  isOpen,
+  teacher,
+  onClose,
+  onSave,
+}: FacultyModalProps) {
   if (!isOpen) return null;
   const modalKey = teacher ? `edit-${teacher.id}` : "add-new";
   return (
@@ -35,7 +40,7 @@ function FacultyModal({ isOpen, teacher, onClose, onSave }: FacultyModalProps) {
       onSave={onSave}
     />
   );
-}
+});
 
 function FacultyModalContent({
   teacher,
@@ -48,7 +53,6 @@ function FacultyModalContent({
 }) {
   const isEditMode = !!teacher;
 
-  // 🚀 Added local state to hold array values fetched dynamically from MongoDB
   const [dbPrefixes, setDbPrefixes]     = useState<string[]>([]);
   const [dbRoles, setDbRoles]           = useState<string[]>([]);
   const [dbStatus, setDbStatus]         = useState<string[]>([]);
@@ -59,7 +63,7 @@ function FacultyModalContent({
       return { ...teacher };
     }
     return {
-      id: "" as unknown as number, 
+      id: "",
       teacher_id: "",
       prefix: "",
       first_name: "",
@@ -73,45 +77,26 @@ function FacultyModalContent({
     };
   });
 
-  // 🚀 Fetch current dropdown configurations from database when modal mounts
   useEffect(() => {
+    let cancelled = false;
+
     const loadDropdownConfigs = async () => {
       try {
         const res = await fetch("/api/portal/admin?table=configuration");
         if (res.ok) {
           const configDoc = await res.json();
-          // Extract prefix array safely or fallback to empty array
+          if (cancelled) return;
           if (configDoc && Array.isArray(configDoc.prefix)) {
             setDbPrefixes(configDoc.prefix);
-            
-            // If adding a new teacher, optionally auto-select the first prefix item available
-            if (!isEditMode && configDoc.prefix.length > 0) {
-              setFormData((prev) => ({ ...prev, prefix: "" })); // Keep empty or set configDoc.prefix[0]
-            }
           }
           if (configDoc && Array.isArray(configDoc.employee_role)) {
             setDbRoles(configDoc.employee_role);
-            
-            // If adding a new teacher, optionally auto-select the first prefix item available
-            if (!isEditMode && configDoc.employee_role.length > 0) {
-              setFormData((prev) => ({ ...prev, role: "" })); // Keep empty or set configDoc.prefix[0]
-            }
           }
           if (configDoc && Array.isArray(configDoc.employee_status)) {
             setDbStatus(configDoc.employee_status);
-            
-            // If adding a new teacher, optionally auto-select the first prefix item available
-            if (!isEditMode && configDoc.employee_status.length > 0) {
-              setFormData((prev) => ({ ...prev, status: "" })); // Keep empty or set configDoc.prefix[0]
-            }
           }
           if (configDoc && Array.isArray(configDoc.department)) {
             setDbDepartment(configDoc.department);
-            
-            // If adding a new teacher, optionally auto-select the first prefix item available
-            if (!isEditMode && configDoc.department.length > 0) {
-              setFormData((prev) => ({ ...prev, status: "" })); // Keep empty or set configDoc.prefix[0]
-            }
           }
         }
       } catch (err) {
@@ -120,13 +105,19 @@ function FacultyModalContent({
     };
 
     loadDropdownConfigs();
-  }, [isEditMode]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(formData);
-    onClose();
-  };
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      onSave(formData);
+      onClose();
+    },
+    [formData, onSave, onClose]
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -151,7 +142,6 @@ function FacultyModalContent({
             </div>
           )}
 
-          {/* 🚀 UPDATED: Dynamic Database Options Dropdown Field */}
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Prefix</label>
             <select
@@ -162,9 +152,7 @@ function FacultyModalContent({
             >
               <option value="">-- Select Prefix --</option>
               {dbPrefixes.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
+                <option key={p} value={p}>{p}</option>
               ))}
             </select>
           </div>
@@ -221,11 +209,9 @@ function FacultyModalContent({
               className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-800 focus:border-blue-500 focus:outline-none"
             >
               <option value="">-- Select Department --</option>
-                  {dbDepartment.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
+              {dbDepartment.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
             </select>
           </div>
 
@@ -250,11 +236,9 @@ function FacultyModalContent({
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-800 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">-- Select Role --</option>
-                  {dbRoles.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
+                {dbRoles.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
               </select>
             </div>
 
@@ -267,19 +251,11 @@ function FacultyModalContent({
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-800 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">-- Select Status --</option>
-                  {dbStatus.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
+                {dbStatus.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 pt-2">
-            <span className="text-[11px] text-gray-400 italic">
-              * Don't see your configuration choice selection listed above? Navigate to Global Settings page layouts panel dashboard to populate values.
-            </span>
           </div>
 
           <div className="mt-6 flex justify-end space-x-3 border-t pt-4">
@@ -307,137 +283,226 @@ export default function ManageTeachers() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  //Sorting
+  const [passwordRequestingId, setPasswordRequestingId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<keyof Teacher | "faculty_name">("teacher_id");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
-  const fetchTeachers = async () => {
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
+
+  const fetchTeachers = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch("/api/portal/admin?table=teachers");
       if (res.ok) {
         const data = await res.json();
-        setTeachers(data); 
-      } else {
-        console.error("Failed to load teachers from backend database.");
+        setTeachers(data);
       }
     } catch (err) {
       console.error("Network connectivity issue:", err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchTeachers();
-  }, []);
+  }, [fetchTeachers]);
 
-  const handleSort = (field: keyof Teacher | "faculty_name") => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("asc");
-    }
+  // Extract unique departments dynamically from teachers list
+  const departmentOptions = useMemo(() => {
+    const deps = teachers
+      .map((t) => t.department_id)
+      .filter((dept): dept is string => Boolean(dept));
+    return Array.from(new Set(deps)).sort();
+  }, [teachers]);
+
+  // Reset to page 1 whenever searching or filtering
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
   };
 
-  const renderSortArrow = (field: keyof Teacher | "faculty_name") => {
-    if (sortField !== field) return <span className="text-gray-300 ml-1">↕</span>;
-    return sortDirection === "asc" ? <span className="text-blue-600 ml-1">▲</span> : <span className="text-blue-600 ml-1">▼</span>;
+  const handleDepartmentFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setDepartmentFilter(e.target.value);
+    setCurrentPage(1);
   };
 
-  const filteredTeachers = teachers.filter(
-    (t) =>
-      t.prefix?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.teacher_id?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const sortedTeachers = [...filteredTeachers].sort((a, b) => {
-    let aValue = "";
-    let bValue = "";
-
-    if (sortField === "faculty_name") {
-      aValue = `${a.last_name} ${a.first_name}`.toLowerCase();
-      bValue = `${b.last_name} ${b.first_name}`.toLowerCase();
-    } else {
-      aValue = String(a[sortField] || "").toLowerCase();
-      bValue = String(b[sortField] || "").toLowerCase();
+  const handleSetPasswordClick = useCallback(async (teacher: Teacher) => {
+    if (!confirm(`Send a secure password setup link to ${teacher.prefix} ${teacher.last_name}?`)) {
+      return;
     }
 
-    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
-    return 0;
-  });
-
-  const handleAddClick = () => {
-    setSelectedTeacher(null);
-    setIsModalOpen(true);
-  };
-
-  const handleEditClick = (teacher: Teacher) => {
-    setSelectedTeacher(teacher);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedTeacher(null);
-  };
-
-  const handleSaveTeacher = async (savedTeacher: Teacher) => {
-    const isEditMode = savedTeacher.id ? teachers.some((t) => t.id === savedTeacher.id) : false;
-    const url = "/api/portal/admin?table=teachers";
-    const method = isEditMode ? "PUT" : "POST";
-
-    const payload = { ...savedTeacher };
-    if (!isEditMode) {
-      delete (payload as any).id;
-    }
-
+    setPasswordRequestingId(teacher.teacher_id);
     try {
-      const res = await fetch(url, {
-        method: method,
+      const res = await fetch("/api/portal/admin/send-email", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          teacher_id: teacher.teacher_id,
+          email_address: teacher.email_address,
+          faculty_name: `${teacher.prefix} ${teacher.first_name} ${teacher.last_name}`,
+          id: teacher.id
+        }),
       });
 
       if (res.ok) {
-        await fetchTeachers();
-        setIsModalOpen(false);
-        setSelectedTeacher(null);
+        alert("The secure initialization setup password email has been sent successfully!");
       } else {
         const errData = await res.json();
-        alert(errData.message || "Could not commit teacher record changes.");
+        alert(errData.message || "Failed to trigger email system dispatch protocols.");
       }
     } catch (error) {
-      console.error("Transaction save error:", error);
+      console.error("Password link dispatch error:", error);
+      alert("A system error isolated network pipeline routines.");
+    } finally {
+      setPasswordRequestingId(null);
     }
-  };
+  }, []);
+
+  const handleSort = useCallback((field: keyof Teacher | "faculty_name") => {
+    setCurrentPage(1); // Reset page on sort
+    setSortField((prevField) => {
+      if (prevField === field) {
+        setSortDirection((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
+        return prevField;
+      }
+      setSortDirection("asc");
+      return field;
+    });
+  }, []);
+
+  const renderSortArrow = useCallback(
+    (field: keyof Teacher | "faculty_name") => {
+      if (sortField !== field) return <span className="text-gray-300 ml-1">↕</span>;
+      return sortDirection === "asc" ? <span className="text-blue-600 ml-1">▲</span> : <span className="text-blue-600 ml-1">▼</span>;
+    },
+    [sortField, sortDirection]
+  );
+
+  const sortedTeachers = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+
+    const filtered = teachers.filter((t) => {
+      const matchesSearch =
+        t.prefix?.toLowerCase().includes(q) ||
+        t.first_name?.toLowerCase().includes(q) ||
+        t.last_name?.toLowerCase().includes(q) ||
+        t.teacher_id?.toLowerCase().includes(q);
+
+      const matchesDepartment = departmentFilter ? t.department_id === departmentFilter : true;
+
+      return matchesSearch && matchesDepartment;
+    });
+
+    return filtered.sort((a, b) => {
+      let aValue = "";
+      let bValue = "";
+
+      if (sortField === "faculty_name") {
+        aValue = `${a.last_name} ${a.first_name}`.toLowerCase();
+        bValue = `${b.last_name} ${b.first_name}`.toLowerCase();
+      } else {
+        aValue = String(a[sortField] || "").toLowerCase();
+        bValue = String(b[sortField] || "").toLowerCase();
+      }
+
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [teachers, searchQuery, departmentFilter, sortField, sortDirection]);
+
+  // Pagination math calculations
+  const totalPages = Math.ceil(sortedTeachers.length / ITEMS_PER_PAGE) || 1;
+  const paginatedTeachers = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedTeachers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [sortedTeachers, currentPage]);
+
+  const handleAddClick = useCallback(() => {
+    setSelectedTeacher(null);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleEditClick = useCallback((teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedTeacher(null);
+  }, []);
+
+  const handleSaveTeacher = useCallback(
+    async (savedTeacher: Teacher) => {
+      const isEditMode = savedTeacher.id ? teachers.some((t) => t.id === savedTeacher.id) : false;
+      const url = "/api/portal/admin?table=teachers";
+      const method = isEditMode ? "PUT" : "POST";
+
+      const payload = { ...savedTeacher };
+      if (!isEditMode) delete (payload as any).id;
+
+      try {
+        const res = await fetch(url, {
+          method: method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          await fetchTeachers();
+          setIsModalOpen(false);
+          setSelectedTeacher(null);
+        } else {
+          const errData = await res.json();
+          alert(errData.message || "Could not commit teacher record changes.");
+        }
+      } catch (error) {
+        console.error("Transaction save error:", error);
+      }
+    },
+    [teachers, fetchTeachers]
+  );
 
   return (
     <div className="p-6">
       <div className="p-4 bg-white flex flex-col md:flex-row justify-between items-center shadow rounded-t-xl border-b border-gray-100 gap-4">
-        <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-          <h2 className="text-xl font-bold text-gray-800">Faculty Management</h2>
-          <div className="relative w-full md:w-64">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <h2 className="text-xl font-bold text-gray-800 whitespace-nowrap">Faculty Management</h2>
+          
+          <div className="relative w-full sm:w-64">
             <input
               type="text"
               placeholder="Search by name or ID..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleSearchChange}
               className="w-full pl-3 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          <select
+            value={departmentFilter}
+            onChange={handleDepartmentFilterChange}
+            className="w-full sm:w-48 py-2 px-3 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Departments</option>
+            {departmentOptions.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept}
+              </option>
+            ))}
+          </select>
         </div>
 
         <button
           onClick={handleAddClick}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium w-full md:w-auto"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium w-full md:w-auto whitespace-nowrap"
         >
           Add Faculty
         </button>
@@ -473,10 +538,10 @@ export default function ManageTeachers() {
                   </th>
                   <th className="pb-4 text-right">Actions</th>
                 </tr>
-              </thead> 
+              </thead>
 
               <tbody className="divide-y">
-                {sortedTeachers.map((teacher) => (
+                {paginatedTeachers.map((teacher) => (
                   <tr key={teacher.teacher_id} className="hover:bg-gray-50">
                     <td className="py-4 font-mono text-gray-600">{teacher.teacher_id}</td>
                     <td className="py-4">
@@ -502,12 +567,23 @@ export default function ManageTeachers() {
                     </td>
                     <td className="py-4 font-semibold">{teacher.role_id}</td>
                     <td className="py-4 text-right">
-                      <button
-                        onClick={() => handleEditClick(teacher)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex justify-end gap-3 items-center">
+                        <button
+                          disabled={passwordRequestingId !== null}
+                          onClick={() => handleSetPasswordClick(teacher)}
+                          className="text-indigo-600 hover:text-indigo-900 text-sm font-medium disabled:opacity-40 transition-colors"
+                        >
+                          {passwordRequestingId === teacher.teacher_id ? "Sending..." : "Set Password"}
+                        </button>
+                        <span className="text-gray-200">|</span>
+                        <button
+                          disabled={passwordRequestingId !== null}
+                          onClick={() => handleEditClick(teacher)}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium disabled:opacity-40 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -516,7 +592,56 @@ export default function ManageTeachers() {
 
             {sortedTeachers.length === 0 && (
               <div className="text-center py-10 text-gray-500 italic">
-                No faculty members match your search.
+                No faculty members match your search or filter.
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {sortedTeachers.length > 0 && (
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between border-t border-gray-200 pt-4 gap-4 text-sm text-gray-600">
+                <div>
+                  Showing{" "}
+                  <span className="font-medium text-gray-800">
+                    {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, sortedTeachers.length)}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium text-gray-800">
+                    {Math.min(currentPage * ITEMS_PER_PAGE, sortedTeachers.length)}
+                  </span>{" "}
+                  of <span className="font-medium text-gray-800">{sortedTeachers.length}</span> results
+                </div>
+
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    Previous
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                        currentPage === page
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-700 border border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
           </>

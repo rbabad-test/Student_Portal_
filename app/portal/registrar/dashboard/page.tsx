@@ -6,11 +6,13 @@ import { useState, useEffect } from 'react';
 export default function DashboardPage() {
   const [studentCount, setStudentCount] = useState<number>(0);
   const [admissionCount, setAdmissionCount] = useState<number>(0);
+  const [pendingStudentCount, setPendingStudentCount] = useState<number>(0);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const res = await fetch("/api/portal/registrar?table=students&count=true");
+        // 🚀 UPDATED: Added '&status=Enrolled' onto the API route query string
+        const res = await fetch("/api/portal/registrar?table=students&count=true&status=Enrolled");
         if (res.ok) {
           const data = await res.json();
           setStudentCount(data.count); 
@@ -25,7 +27,8 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const res = await fetch("/api/portal/registrar?table=admissions_applications&count=true");
+        // 🚀 UPDATED: Added '&status=Pending' filter parameter onto the endpoint string
+        const res = await fetch("/api/portal/registrar?table=admissions_applications&count=true&status=Pending");
         if (res.ok) {
           const data = await res.json();
           setAdmissionCount(data.count); 
@@ -37,13 +40,28 @@ export default function DashboardPage() {
     fetchMetrics();
   }, []);
 
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch("/api/portal/registrar?table=students&count=true&status=Pending");
+        if (res.ok) {
+          const data = await res.json();
+          setPendingStudentCount(data.count); 
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard statistics:", err);
+      }
+    };
+    fetchMetrics();
+  }, []);
+
   const stats = [
     { 
-      label: 'Total Students', 
+      label: 'Enrolled Students', 
       value: studentCount, 
       color: 'text-blue-600', 
       bg: 'bg-blue-100', 
-      trend: '12%', 
+      trend: '', 
       up: true,
       svg: <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
     },
@@ -55,6 +73,15 @@ export default function DashboardPage() {
       trend: 'Action needed', 
       up: false,
       svg: <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    },
+    { 
+      label: 'Pending Enrollment', 
+      value: pendingStudentCount, 
+      color: 'text-rose-600', 
+      bg: 'bg-rose-100', 
+      trend: 'Review needed', 
+      up: false,
+      svg: <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.656-5.64 9.094 9.094 0 00-3.741.479m1.112 5.64M12 12a5 5 0 100-10 5 5 0 000 10zm0 0c-2.67 0-5 1.33-6.16 3.35A4.922 4.922 0 0012 21a4.922 4.922 0 006.16-5.65C17 13.33 14.67 12 12 12z" />
     },
     { 
       label: 'Class Sections', 

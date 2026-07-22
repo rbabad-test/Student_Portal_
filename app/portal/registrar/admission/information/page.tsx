@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+const enrollmentURL = "https://solid-umbrella-gxj599j9jpp3vx9-3000.app.github.dev/admission/enrollment";
+
 interface ApplicantData {
-  _id: string; // Internal database marker
-  applicant_id: string; // 🚀 Primary key used for tracking and lookup now
+  _id: string; 
+  applicant_id: string; 
   status: string;
   submittedAt: string;
   firstName: string;
@@ -37,8 +39,6 @@ interface ApplicantData {
 export default function AdminApplicantDetailsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  // 🚀 FIXED: Now pulling your custom string ID format (e.g., ID-2026-00001) from the browser address bar url
   const applicantId = searchParams.get("id"); 
 
   const [applicant, setApplicant] = useState<ApplicantData | null>(null);
@@ -49,7 +49,6 @@ export default function AdminApplicantDetailsPage() {
     if (!applicantId) return;
     setLoading(true);
     try {
-      // 🚀 FIXED: Sending custom applicant_id down the query stream parameters instead of MongoDB object _id
       const res = await fetch(`/api/portal/registrar?table=admissions_applications&id=${applicantId}`);
       if (res.ok) {
         const jsonResponse = await res.json();
@@ -68,21 +67,78 @@ export default function AdminApplicantDetailsPage() {
     fetchApplicantDetails();
   }, [applicantId]);
 
-  // Handler to execute status amendments inside MongoDB via PUT matching your application ID
+  // 🚀 UPDATED: Modified handler to update status AND automatically dispatch notification emails
   const updateStatus = async (newStatus: "Approved" | "Rejected") => {
     if (!applicant) return;
     setActionLoading(true);
     try {
+      // 1. Update your database record via API
       const res = await fetch("/api/portal/registrar", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        // 🚀 FIXED: Passing applicant_id inside body payload structural variables instead of raw _id
         body: JSON.stringify({ applicant_id: applicant.applicant_id, status: newStatus }),
       });
 
       if (res.ok) {
         setApplicant((prev) => prev ? { ...prev, status: newStatus } : null);
-        alert(`Application status marked as ${newStatus} successfully.`);
+        
+        // ====================================================================
+        // 🚀 THE DYNAMIC EMAIL SET SWITCH
+        // ====================================================================
+        
+        // 1. Swaps the Subject Line based on the button clicked
+        const emailSubject = newStatus === "Approved" 
+          ? "Admission Update: Application Approved! 🎉" 
+          : "Admission Update: Application Status Profile";
+
+        // 2. Swaps the HTML Email Body template based on the button clicked
+        const emailHtmlContent = newStatus === "Approved" 
+          ? `
+            <div style="font-family: sans-serif; max-width: 600px; color: #333; line-height: 1.6;">
+              <h2 style="color: #2575fc;">Congratulations, ${applicant.firstName}!</h2>
+              <p>We are pleased to inform you that your admission application for the <strong>${applicant.track}</strong> track has been <strong>Approved</strong>.</p>
+              <p><strong>Admission Tracking ID:</strong> ${applicant.applicant_id}</p>
+              <p>Please follow the link below to completed your enrollment process</>
+              <p><a href="https://solid-umbrella-gxj599j9jpp3vx9-3000.app.github.dev/admission/verification">Enrollment link</a></p>
+              <p>Our registrar office will reach out to you shortly regarding the next enrolment steps, document verification, and schedules.</p>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+              <p style="font-size: 12px; color: #666;">Saint Gregory College of Science and Technology</p>
+            </div>
+          `
+          : `
+            <div style="font-family: sans-serif; max-width: 600px; color: #333; line-height: 1.6;">
+              <h2 style="color: #dc2626;">Application Status Update</h2>
+              <p>Hello ${applicant.firstName},</p>
+              <p>Thank you for your application to Saint Gregory College of Science and Technology.</p>
+              <p>After a thorough review of your application details for the <strong>${applicant.track}</strong> track (ID: ${applicant.applicant_id}), we regret to inform you that we are unable to accept your admission application at this time.</p>
+              <p>We wish you the absolute best in your future academic pursuits.</p>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+              <p style="font-size: 12px; color: #666;">Saint Gregory College of Science and Technology</p>
+            </div>
+          `;
+
+        // 3. Post the selected set to your single email route handler
+        try {
+          const emailRes = await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: applicant.email, 
+              subject: emailSubject,
+              htmlContent: emailHtmlContent,
+            }),
+          });
+
+          if (emailRes.ok) {
+            alert(`Application marked as ${newStatus} and notification email sent to ${applicant.email}.`);
+          } else {
+            alert(`Application marked as ${newStatus}, but notification email delivery failed.`);
+          }
+        } catch (emailErr) {
+          console.error("Email API network route error:", emailErr);
+          alert(`Application status updated to ${newStatus}, but a network problem blocked email sending.`);
+        }
+
       } else {
         alert("Could not update state configuration.");
       }
@@ -210,7 +266,6 @@ export default function AdminApplicantDetailsPage() {
                       name={file.filename} 
                       status="Uploaded" 
                       applicantId={applicant.applicant_id} 
-                      // 🚀 Ensure it references the exact string _id property mapped out of MongoDB
                       fileId={file._id} 
                     />
                   ))
@@ -224,16 +279,18 @@ export default function AdminApplicantDetailsPage() {
             <Card title="Application Assessment Review">
               <div className="grid grid-cols-2 gap-3">
                 <button 
-                  disabled={actionLoading}
+                  // 🚀 DISABLE IF: An action is currently loading OR the status is no longer "Pending"
+                  disabled={actionLoading || applicant.status !== "Pending"}
                   onClick={() => updateStatus("Approved")}
-                  className="bg-green-100 text-green-700 py-2.5 px-4 rounded-lg hover:bg-green-200 text-sm font-semibold transition-colors disabled:opacity-50"
+                  className="bg-green-100 text-green-700 py-2.5 px-4 rounded-lg hover:bg-green-200 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Approve Application
                 </button>
                 <button 
-                  disabled={actionLoading}
+                  // 🚀 DISABLE IF: An action is currently loading OR the status is no longer "Pending"
+                  disabled={actionLoading || applicant.status !== "Pending"}
                   onClick={() => updateStatus("Rejected")}
-                  className="bg-red-100 text-red-700 py-2.5 px-4 rounded-lg hover:bg-red-200 text-sm font-semibold transition-colors disabled:opacity-50"
+                  className="bg-red-100 text-red-700 py-2.5 px-4 rounded-lg hover:bg-red-200 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Reject Application
                 </button>
@@ -247,6 +304,7 @@ export default function AdminApplicantDetailsPage() {
   );
 }
 
+// Sub components remain unchanged below
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
@@ -269,33 +327,14 @@ function Field({ label, value }: { label?: string; value: string }) {
   );
 }
 
-function FileItem({ 
-  name, 
-  status, 
-  applicantId, 
-  fileId 
-}: { 
-  name: string; 
-  status: string; 
-  applicantId: string; // 🚨 Ensure these strings are fully populated
-  fileId: string;
-}) {
-  // 🚀 CRITICAL FIX: Ensure you are NOT appending "?table=" here. 
-  // If you include table params on a download link, it can trip up routing order blocks.
+function FileItem({ name, status, applicantId, fileId }: { name: string; status: string; applicantId: string; fileId: string; }) {
   const downloadUrl = `/api/portal/registrar?applicantId=${applicantId}&fileId=${fileId}`;
-
   return (
     <div className="flex justify-between items-center border border-gray-100 p-3 rounded-lg bg-gray-50/40">
       <div className="flex flex-col min-w-0 max-w-[180px]">
         <span className="text-xs font-medium text-gray-700 truncate">{name}</span>
-        
-        {/* 🚀 Make sure downloadUrl is strictly referenced as the href anchor */}
-        <a 
-          href={downloadUrl}
-          download={name}
-          className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-semibold mt-0.5"
-        >
-          📥 Download Document
+        <a href={downloadUrl} download={name} className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-semibold mt-0.5">
+          Public Download Document
         </a>
       </div>
       <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-md bg-green-100 text-green-700">

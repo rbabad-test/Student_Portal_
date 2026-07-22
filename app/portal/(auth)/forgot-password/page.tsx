@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
 
         {/* Back link */}
         <a
-          href="/Portal/log-in"
+          href="/portal/log-in"
           className="inline-block mt-4 text-blue-500 hover:underline font-medium"
         >
           ← Back to Login

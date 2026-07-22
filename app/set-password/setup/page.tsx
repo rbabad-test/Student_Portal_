@@ -38,17 +38,17 @@ const InputField: React.FC<InputFieldProps> = ({
   </div>
 );
 
-export default function EnrollmentForm() {
+export default function TeacherRegistrationForm() {
   const router = useRouter();
   
-  const [controlNumber, setControlNumber] = useState<string | null>(null);
-  const [studentData, setStudentData] = useState<any>(null); // This stores all data from admission_application
+  const [teacherControlId, setTeacherControlId] = useState<string | null>(null);
+  const [teacherData, setTeacherData] = useState<any>(null); // Stores data from the teachers collection
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [agree, setAgree] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // New Mutable Form States
+  // Mutable Form States
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [contactPerson, setContactPerson] = useState("");
@@ -56,67 +56,63 @@ export default function EnrollmentForm() {
   const [contactNumber, setContactNumber] = useState("");
 
   useEffect(() => {
-  const cachedNumber = localStorage.getItem("enrollment_control_number");
-  if (!cachedNumber) {
+  // 1. Retrieve the exact keys you set on the previous page
+  const cachedTeacherId = localStorage.getItem("cached_teacher_id");
+  const cachedSecurityCode = localStorage.getItem("cached_security_code");
+
+  // If either key is missing, lock the page layout
+  if (!cachedTeacherId || !cachedSecurityCode) {
     setLoading(false);
     return;
   }
-  setControlNumber(cachedNumber);
+  
+  // Set the controller ID string state
+  setTeacherControlId(cachedTeacherId);
 
-  const fetchStudentProfile = async () => {
+  const fetchTeacherProfile = async () => {
     try {
-      const res = await fetch(`/api/portal/registrar?table=admissions_applications&id=${cachedNumber}`);
+      // 2. Pass the correct cached properties to your backend data router API.
+      // If your API expects the security code (id) to find the profile, use cachedSecurityCode here instead.
+      const res = await fetch(`/api/set-password/verify?table=teachers&teacher_id=${cachedTeacherId}`);
+      
       if (res.ok) {
         const jsonResponse = await res.json();
         
-        // 🚀 Extract and save the raw admission details object directly
+        // 3. Save the payload directly to state variable references
         const applicationDetails = jsonResponse.data; 
-        setStudentData(applicationDetails);
-
-        // Optional: If you want to log or work with all entries as an array of key-value pairs:
-        const detailsArray = Object.entries(applicationDetails);
-        console.log("Application Data Array Structure:", detailsArray);
+        setTeacherData(applicationDetails);
+      } else {
+        console.error("API error: Server returned status code", res.status);
       }
     } catch (err) {
-      console.error("Failed to recover enrollment session:", err);
+      console.error("Failed to recover teacher account session:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  fetchStudentProfile();
+  fetchTeacherProfile();
 }, []);
 
-  const handleEnrollmentSubmit = async (e: React.FormEvent) => {
+  const handleTeacherSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const formattedStudentId = studentData.applicant_id && typeof studentData.applicant_id === "string"
-    ? studentData.applicant_id.replace(/^ID-/, "ST-")
-    : "ST-XXXX-XXXXX";
-
-    const completeAddress = `${studentData.street || ""}, ${studentData.city || ""}, ${studentData.province || ""}, ${studentData.zip || ""}`
+    const completeAddress = `${teacherData.street || ""}, ${teacherData.city || ""}, ${teacherData.province || ""}, ${teacherData.zip || ""}`
           .replace(/^,\s*/, "") 
           .replace(/,\s*$/, "");
 
     const payloadDetails = {
-      status: "Pending",
-      student_id: formattedStudentId,
-      first_name: studentData.firstName,
-      middle_name: studentData.middleName,
-      last_name: studentData.lastName,
-      email_address: studentData.email,
-      contact_number: studentData.phone,
-      date_of_birth: studentData.dob,
-      gender: studentData.gender,
-      nationality: studentData.nationality,
-      secondary_school: studentData.lastSchool,
+      status: "Active",
+      teacher_id: teacherData.teacher_id,
+      prefix: teacherData.prefix,
+      first_name: teacherData.first_name,
+      middle_name: teacherData.middle_name,
+      last_name: teacherData.last_name,
+      email_address: teacherData.email_address,
+      contact_number: teacherData.contact_number,
       residential_address: completeAddress,
-      emergency_contact_person: contactPerson,
-      emergency_contact_relationship: relationship,
-      emergency_contact_number: contactNumber,
-      gpa: "",
-      graduation_year: "",
-      track: studentData.track,
+      department_id: teacherData.department_id,
+      role_id: teacherData.role_id,
     };
 
     if (password !== confirmPassword) {
@@ -124,24 +120,18 @@ export default function EnrollmentForm() {
       return;
     }
 
-    if (!contactPerson || !relationship || !contactNumber) {
-      setErrorMsg("Please fill in all mandatory emergency contact fields.");
-      return;
-    }
-
     setSubmitting(true);
 
     try {
-      const response = await fetch("/api/admission/enroll", {
+      const response = await fetch("/api/set-password/setup", { // <-- Update path if necessary
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // 🚀 UPDATE THIS: Send your payloadDetails and your accountSetup properties together
-          studentProfile: payloadDetails, 
+          teacherProfile: payloadDetails, 
           accountSetup: { 
-            username: formattedStudentId,
+            username: teacherData.teacher_id,
             password: password,
-            user_type: "student"
+            user_type: "teacher"
           }
         }),
       });
@@ -149,10 +139,13 @@ export default function EnrollmentForm() {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        localStorage.removeItem("enrollment_control_number"); // Clear cache session upon success
+        // ✅ Clear your exact active session cache string keys here
+        localStorage.removeItem("cached_teacher_id"); 
+        localStorage.removeItem("cached_security_code");
+        
         router.push("/portal/log-in");
       } else {
-        setErrorMsg(result.message || "Enrollment processing failed.");
+        setErrorMsg(result.message || "Teacher registry account configuration processing failed.");
       }
     } catch (err) {
       console.error("Submission pipeline error:", err);
@@ -167,22 +160,22 @@ export default function EnrollmentForm() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-4 border-[#166534] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm font-semibold text-slate-500">Retrieving Enrollment Access State...</p>
+          <p className="text-sm font-semibold text-slate-500">Retrieving Teacher Account State...</p>
         </div>
       </div>
     );
   }
 
-  if (!controlNumber || !studentData || studentData.status !== "Approved") {
+  if (!teacherControlId || !teacherData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
         <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl text-center space-y-6">
-          <h1 className="text-2xl font-black text-red-600">Enrollment Locked</h1>
+          <h1 className="text-2xl font-black text-red-600">Account Setup Locked</h1>
           <p className="text-sm text-slate-500 leading-relaxed">
-            No valid or approved application access authorization was found in your browser session.
+            No valid or authorized teacher session profile credentials were found in your browser cache.
           </p>
           <button
-            onClick={() => router.push("/admission/verify")}
+            onClick={() => router.push("/set-password/verify")}
             className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold tracking-wider transition-colors"
           >
             Go to Verification Page
@@ -192,42 +185,37 @@ export default function EnrollmentForm() {
     );     
   }
 
-  const studentFullName = `${studentData.firstName} ${studentData.middleName ? `${studentData.middleName} ` : ""}${studentData.lastName}`;
-
-  const formattedStudentId = studentData.applicant_id && typeof studentData.applicant_id === "string"
-    ? studentData.applicant_id.replace(/^ID-/, "ST-")
-    : "ST-XXXX-XXXXX";
+  const teacherFullName = `${teacherData.prefix ? `${teacherData.prefix} ` : ""}${teacherData.first_name} ${teacherData.middle_name ? `${teacherData.middle_name} ` : ""}${teacherData.last_name}`;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-[#1E293B] p-6 md:p-12">
       <div className="max-w-4xl mx-auto">
         <div className="mb-10 flex justify-between items-end">
           <div>
-            <h1 className="text-4xl font-black text-[#166534]">SGCST Enrollment</h1>
-            <p className="text-slate-500 font-medium italic">Final Enrollment Confirmation</p>
+            <h1 className="text-4xl font-black text-[#166534]">Teacher Portal Setup</h1>
+            <p className="text-slate-500 font-medium italic">Account Registration Confirmation</p>
           </div>
           <button onClick={() => router.back()} disabled={submitting} className="text-sm font-bold text-slate-400 hover:text-red-600 transition-colors">
             Back
           </button>
         </div>
 
-        {/* 🚀 FIXED: Changed container layout shell from a div to a form handler */}
-        <form onSubmit={handleEnrollmentSubmit} className="bg-white rounded-3xl p-8 md:p-12 shadow-xl space-y-10">
+        <form onSubmit={handleTeacherSubmit} className="bg-white rounded-3xl p-8 md:p-12 shadow-xl space-y-10">
           <div className="pb-6 border-b border-slate-100">
-            <h3 className="text-2xl font-black text-[#166534]">Student Information</h3>
+            <h3 className="text-2xl font-black text-[#166534]">Teacher Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              <InputField label="Control ID" value={studentData.applicant_id} readOnly />
-              <InputField label="Full Name" value={studentFullName} readOnly />
-              <InputField label="Track / Program" value={studentData.track} readOnly />
-              <InputField label="Year/Grade Level" value={studentData.gradeLevel || "N/A"} readOnly />
-              <InputField label="Admission Status" value={studentData.status} readOnly />
+              <InputField label="Database ID Reference" value={teacherData.id} readOnly />
+              <InputField label="Full Name" value={teacherFullName} readOnly />
+              <InputField label="Department Code" value={teacherData.department_id || "N/A"} readOnly />
+              <InputField label="Assigned Role ID" value={teacherData.role_id || "N/A"} readOnly />
+              <InputField label="Current Employment Status" value={teacherData.status} readOnly />
             </div>
           </div>
 
           <div className="pb-6 border-b border-slate-100">
             <h3 className="text-2xl font-black text-[#166534]">Account Setup</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              <InputField label="Student ID" value={formattedStudentId} readOnly />
+              <InputField label="Teacher ID" value={teacherData.teacher_id} readOnly />
               <br/>
               <InputField 
                 label="Password *" 
@@ -246,33 +234,6 @@ export default function EnrollmentForm() {
             </div>
           </div>
 
-          <div>
-            <h4 className="text-sm font-black text-amber-600 uppercase tracking-widest mb-6">Emergency Contact</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <InputField 
-                label="Contact Person *" 
-                placeholder="Full Name" 
-                value={contactPerson} 
-                onChange={(e) => setContactPerson(e.target.value)} 
-                disabled={submitting}
-              />
-              <InputField 
-                label="Relationship *" 
-                placeholder="Guardian" 
-                value={relationship} 
-                onChange={(e) => setRelationship(e.target.value)} 
-                disabled={submitting}
-              />
-              <InputField 
-                label="Contact Number *" 
-                placeholder="+63 9xx xxx xxxx" 
-                value={contactNumber} 
-                onChange={(e) => setContactNumber(e.target.value)} 
-                disabled={submitting}
-              />
-            </div>
-          </div>
-
           <div className="flex items-start gap-3 pt-4">
             <input
               type="checkbox"
@@ -283,7 +244,7 @@ export default function EnrollmentForm() {
               className="mt-1"
             />
             <label className="text-sm leading-snug text-slate-600 select-none">
-              I hereby confirm my enrollment for the upcoming academic term and agree to comply with all university policies, fees, and requirements.
+              I hereby confirm my access activation for the portal system and agree to comply with all institution administrative policies and security terms.
             </label>
           </div>
 
@@ -300,7 +261,7 @@ export default function EnrollmentForm() {
               agree && !submitting ? "bg-[#166534] hover:bg-[#14532d] text-white" : "bg-slate-300 text-slate-500 cursor-not-allowed"
             }`}
           >
-            {submitting ? "Processing Enrollment..." : "Confirm Enrollment"}
+            {submitting ? "Processing Profile Setup..." : "Confirm Account Setup"}
           </button>
         </form>
       </div>
