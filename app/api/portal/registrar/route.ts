@@ -328,13 +328,33 @@ export async function PUT(request: NextRequest) {
     const { model: TargetModel } = ALLOWED_TABLES[tableName];
     const body = await request.json();
 
+    // 1. Handle Admissions Applications (When approving/rejecting from page)
+    if (tableName === "admissions_applications") {
+      const { applicant_id, status } = body;
+
+      const updatedDocument = await TargetModel.findOneAndUpdate(
+        { applicant_id },
+        { $set: { status } },
+        { new: true, runValidators: true }
+      ).lean();
+
+      if (!updatedDocument) {
+        return NextResponse.json(
+          { message: `No application found for Applicant ID ${applicant_id}` },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({ success: true, data: updatedDocument }, { status: 200 });
+    }
+
+    // 2. Handle Student Section Allocation
     if (tableName === "student_section") {
       const { student_id, section, semester, year, subjects, targetYear, targetSemester } = body;
       
       const matchYear = targetYear || year || new Date().getFullYear().toString();
       const matchSemester = targetSemester || semester;
 
-      // Logic 3: Update the existing un-evaluated class record
       const updatedDocument = await TargetModel.findOneAndUpdate(
         { 
           student_id, 
@@ -359,22 +379,11 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      const cookieStore = await cookies();
-      const auditUser = cookieStore.get("audit_user")?.value || "Unknown System Staff";
-      
-      try {
-        await createAuditLog(
-          auditUser,
-          `Updated section allocation for Student ID: ${student_id} to section '${section}' (Semester ${semester}, Year ${year})`
-        );
-      } catch (ae) {
-        console.error("Audit log error:", ae);
-      }
-
       return NextResponse.json({ success: true, data: updatedDocument }, { status: 200 });
     }
 
-    return NextResponse.json({ message: "Invalid route usage" }, { status: 400 });
+    // Fallback if an unhandled allowed table is requested
+    return NextResponse.json({ message: `No update logic defined for table: ${tableName}` }, { status: 400 });
 
   } catch (error: any) {
     console.error("Database update processing error:", error);
