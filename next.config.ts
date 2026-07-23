@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/",
-        destination: "/Home",
+        destination: "/home", // Keep paths lowercase to avoid casing/routing mismatches
         permanent: false, 
       },
     ];
